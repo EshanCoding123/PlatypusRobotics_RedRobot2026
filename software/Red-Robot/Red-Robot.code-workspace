@@ -1,0 +1,57 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"files.autoSave": "onFocusChange",
+		"workbench.colorCustomizations": {
+			"[*Dark*]": {
+				"titleBar.activeBackground": "#440301",
+				"titleBar.border": "#9c0000",
+				"activityBar.background": "#440301",
+				"activityBar.inactiveForeground": "#e20000",
+				"activityBar.foreground": "#ffb8b8",
+				"activityBar.border": "#9c0000",
+				"sideBar.background": "#440301",
+				"sideBar.foreground": "#ffffff",
+				"sideBar.border": "#9c0000",
+				"sideBarTitle.foreground": "#ffffff",
+				"sideBarSectionHeader.foreground": "#e20000",
+				"sideBarSectionHeader.background": "#440301",
+				"statusBar.background": "#440301",
+				"statusBar.border": "#9c0000",
+				"statusBar.foreground": "#e20000",
+				"list.activeSelectionBackground": "#9e0000d4",
+				"list.inactiveSelectionBackground": "#9e00005b",
+				"list.hoverBackground": "#6600005b",
+			},
+			"[*Light*]": {
+				"titleBar.activeBackground": "#c94a42",
+				"titleBar.border": "#9c0000",
+				"activityBar.background": "#c94a42",
+				"activityBar.inactiveForeground": "#ffe0dd",
+				"activityBar.foreground": "#ffffff",
+				"activityBar.border": "#9c0000",
+				"sideBar.background": "#f8dede",
+				"sideBar.foreground": "#440301",
+				"sideBar.border": "#9c0000",
+				"sideBarTitle.foreground": "#440301",
+				"sideBarSectionHeader.foreground": "#9c0000",
+				"sideBarSectionHeader.background": "#f2c6c6",
+				"statusBar.background": "#c94a42",
+				"statusBar.border": "#9c0000",
+				"statusBar.foreground": "#ffffff",
+				"list.activeSelectionBackground": "#e2a1a1d4",
+				"list.inactiveSelectionBackground": "#e2a1a15b",
+				"list.hoverBackground": "#e2a1a13a",
+			}
+		}
+	},
+	"extensions": {
+		"recommendations": [
+			"platformio.platformio-ide"
+		]
+	}
+}

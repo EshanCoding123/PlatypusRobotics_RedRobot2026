@@ -1,0 +1,3 @@
+[submodule "hardware/robot-board/kicad-druid"]
+	path = hardware/robot-board/kicad-druid
+	url = https://github.com/Cimos/kicad-druid.git

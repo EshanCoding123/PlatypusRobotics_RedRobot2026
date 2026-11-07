@@ -1,0 +1,49 @@
+Comment,Designator,Footprint,LCSC Part Number
+"BLED: Light emitting diode, blue",D9,LED_SMD:LED_1206_3216Metric,C375460
+"RXLED: Light emitting diode, orange",D7,LED_SMD:LED_1206_3216Metric,C51933322
+"PWR: Light emitting diode, green",D5,LED_SMD:LED_1206_3216Metric,C5123493
+"PLED: Light emitting diode, orange",D3,LED_SMD:LED_1206_3216Metric,C51933322
+"LBAT: Light emitting diode, red",D2,LED_SMD:LED_1206_3216Metric,C125086
+"D_Small: Diode, small symbol","D1,D10",Diode_SMD:D_SOD-123,C82544
+MAX7219: 8-Digit LED Display Driver,U10,Package_SO:SOIC-24W_7.5x15.4mm_P1.27mm,C52476
+74ACT125: Quadruple Bus Buffer Gates With 3-State Outputs,U9,Package_SO:TSSOP-14_4.4x5mm_P0.65mm,C52940839
+XL-SA3391SRWC: 3 Digit 7-Segment Display,U8,Display_7Segment:XL-SA3391SRWC,C49652877
+DRV8835: ,"U6,U7",Package_SON:WSON-12-1EP_3x2mm_P0.5mm_EP1x2.65,C129328
+SMBJ12A: TVS diode,U4,Diode_SMD:D_SMB,C151251
+LMR51450: ,"U2,U3",Package_SON:WSON-12-1EP_3x3mm_P0.5mm_EP1.5x2.5mm,C5782413
+"ESP32-S3-WROOM-1: RF Module, ESP32-S3 SoC, Wi-Fi 802.11b/g/n, Bluetooth, BLE, 32-bit, 3.3V, onboard antenna, SMD",U1,RF_Module:ESP32-S3-WROOM-1,C2913197
+SW_SPST: Single Pole Single Throw (SPST) switch,"SW1,SW2",footprints:SW_Push_SPST_TS-1088,C720477
+"22R: Resistor, small symbol","R42,R43",Resistor_SMD:R_0402_1005Metric,C2929994
+"33k: Resistor, small symbol",R27,Resistor_SMD:R_0603_1608Metric,C705768
+"33k: Resistor, small symbol",R21,Resistor_SMD:R_0402_1005Metric,C25779
+"5.1k: Resistor, small symbol","R17,R18,R22,R44",Resistor_SMD:R_0402_1005Metric,C25905
+"180R: Resistor, small symbol",R16,Resistor_SMD:R_0402_1005Metric,C138045
+"4.7k: Resistor, small symbol","R8,R9,R10,R11,R12,R13,R14,R15",Resistor_SMD:R_0402_1005Metric,C105871
+"1k: Resistor, small symbol","R6,R7,R19,R20,R24,R29",Resistor_SMD:R_0402_1005Metric,C11702
+"19.1k: Resistor, small symbol",R5,Resistor_SMD:R_0603_1608Metric,C855669
+"31.6k: Resistor, small symbol",R3,Resistor_SMD:R_0603_1608Metric,C860829
+"100k: Resistor, small symbol","R2,R4,R26",Resistor_SMD:R_0603_1608Metric,C122538
+"10k: Resistor, small symbol",R1,Resistor_SMD:R_0402_1005Metric,C25744
+"BSS138: 50V Vds, 0.22A Id, N-Channel MOSFET, SOT-23","Q1,Q2,Q3,Q4,Q5",Package_TO_SOT_SMD:SOT-23,C112239
+"5.6uH: Inductor, small symbol",L2,Inductor_SMD:L_Bourns_SRP7028A_7.3x6.6mm,C5351382
+"4.7uH: Inductor, small symbol",L1,Inductor_SMD:L_Bourns_SRP7028A_7.3x6.6mm,C51933838
+1x2_Screw: ,"J8,J9,J10,J11",footprints:TerminalBlock_DB301V-3.5-2P-GN-H_1x02_P3.50mm_Horizontal,C695629
+"Conn_01x03_Pin: Generic connector, single row, 01x03, script generated","J4,J5,J6,J7",Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical_SMD_Pin1Right,C5160786
+USB_C_Receptacle_USB2.0_14P: USB 2.0-only 14P Type-C Receptacle connector,J3,footprints:USB_C_Receptacle_GCT_USB4105-xx-A_16P_TopMnt_Horizontal,C2988369
+Barrel_Jack: DC Barrel Jack with an internal switch,J2,Connector_BarrelJack:BarrelJack_CLIFF_FC681465S_SMT_Horizontal,C114916
+"Conn_01x09_Pin: Generic connector, single row, 01x09, script generated",J1,Connector_PinHeader_2.54mm:PinHeader_1x09_P2.54mm_Vertical_SMD_Pin1Left,C49423356
+"Fuse_Small: Fuse, small symbol",F1,Fuse:Fuseholder_Littelfuse_Nano2_154x,C206916
+"4.7uF: Unpolarized capacitor, small symbol",C46,Capacitor_SMD:C_0805_2012Metric,C880382
+"1uF: Unpolarized capacitor, small symbol",C45,Capacitor_SMD:C_0402_1005Metric,C49210445
+"1000uF: Unpolarized capacitor, small symbol",C44,Capacitor_SMD:CP_Elec_8x10,C2910470
+"22uF: Unpolarized capacitor, small symbol",C42,Capacitor_SMD:C_0805_2012Metric,C296720
+"100uF: Unpolarized capacitor, small symbol",C37,Capacitor_SMD:C_0805_2012Metric,C141660
+"1uF: Unpolarized capacitor, small symbol","C21,C26,C31,C40",Capacitor_SMD:C_0805_2012Metric,C282734
+"1000uF: Unpolarized capacitor, small symbol","C16,C17,C18",Capacitor_SMD:CP_Elec_10x10,C970714
+"10uF: Unpolarized capacitor, small symbol","C15,C22,C27,C32,C35,C38,C39,C41",Capacitor_SMD:C_0805_2012Metric,C15850
+"33uF: Unpolarized capacitor, small symbol","C12,C14",Capacitor_SMD:C_1206_3216Metric,C342307
+"47uF: Unpolarized capacitor, small symbol","C11,C13",Capacitor_SMD:C_1206_3216Metric,C385907
+"33pF: Unpolarized capacitor, small symbol","C9,C10",Capacitor_SMD:C_0402_1005Metric,C107005
+"0.1uF: Unpolarized capacitor, small symbol","C5,C6,C7,C8,C19,C20,C23,C24,C25,C28,C29,C30,C33,C34,C36,C43,C47",Capacitor_SMD:C_0402_1005Metric,C1525
+"10uF: Unpolarized capacitor, small symbol","C1,C2,C3,C4",Capacitor_SMD:C_1206_3216Metric,C33546013
+"Buzzer: Buzzer, polarized",BZ1,Buzzer_Beeper:MLT-7525,C95299
