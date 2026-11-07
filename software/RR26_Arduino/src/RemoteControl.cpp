@@ -192,5 +192,13 @@ namespace RR_Controller
 
   void ButtonA_Pressed(bool buttonPressedDown)
   {
+    if (buttonPressedDown)
+    {
+      // Enter remote control and stop autonomous driving if needed.
+      ButtonX_Pressed(true);
+    }
+
+    // Motor 0 runs in one direction at full power only while A is held.
+    RedRobot::WriteDCMotor(0, buttonPressedDown ? 100 : 0);
   }
 }
