@@ -265,8 +265,8 @@ void batteryLevelTask(void *) {
 
 namespace Bluefruit {
   bool Parse(char *buf, size_t len) {
-    char c1, c2, c3, c4;
-    if (sscanf(buf, "%c%c%c%c", &c1, &c2, &c3, &c4)) {
+    if (len >= 4) {
+      char c1 = buf[0], c2 = buf[1], c3 = buf[2], c4 = buf[3];
       #ifdef REDROBOT_DEBUG
         Serial.printf("[Bluefruit] '%c' '%c' '%c' '%c'\n", c1, c2, c3, c4);
       #endif
@@ -319,8 +319,8 @@ namespace Bluefruit {
 
 namespace RR_Controller {
   bool Parse(char *buf, size_t len) {
-    char c1, c2, c3, c4;
-    if (sscanf(buf, "%c%c%c%c", &c1, &c2, &c3, &c4)) {
+    if (len >= 4) {
+      char c1 = buf[0], c2 = buf[1], c3 = buf[2], c4 = buf[3];
       #ifdef REDROBOT_DEBUG
         Serial.printf("[RR_Controller] '%c' '%c' '%c/%d' '%d'\n", c1, c2, c3, c3, c4);
       #endif
@@ -400,7 +400,7 @@ void ParseBluetoothCommands(char *buf, size_t len) {
   #ifdef REDROBOT_DEBUG
     Serial.printf("[Bluetooth] Received: \"%s\"\n", buf);
   #endif
-  if (!Bluefruit::Parse(buf, len));
+  if (!Bluefruit::Parse(buf, len))
     RR_Controller::Parse(buf, len);
 }
 

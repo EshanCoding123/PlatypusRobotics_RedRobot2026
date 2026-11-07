@@ -7,11 +7,12 @@
 // Libraries with driver code (don't remove these!)
 #include <Arduino.h>                // make sure this is first
 #include "RedRobot.h"
-#include "RampServoConfig.h"
+#include "MechanismConfig.h"
 
 // Declare some global variables
 bool started; // boolean (true or false) to keep track of if we should start
 int counter;  // integer to hold a count value
+const bool TEST_IR_SENSORS = true; // Set false to run the autonomous driving demo.
 
 // This function runs ONCE, when the microcontroller boots up
 void setup() {
@@ -19,7 +20,7 @@ void setup() {
   RedRobot::InitRedRobot();         // call this first
   RedRobot::InitDCMotors();
   RedRobot::InitServo();
-  RedRobot::SetServo(RAMP_SERVO_CHANNEL, RAMP_CENTER_ANGLE_DEGREES * 180 / 100);
+  RedRobot::SetServo(CLAW_SERVO_CHANNEL, CLAW_CENTER_ANGLE_DEGREES * 180 / 100);
   RedRobot::InitLineSensors();
 
   // Initialize our variables
@@ -31,6 +32,28 @@ void setup() {
 // As an example, this code moves out of the starting box at start, and 
 // Look at RedRobot.h to see the robot interface: what functions you can call and how.
 void AutonomousLoop() {
+
+    if (TEST_IR_SENSORS) {
+        RedRobot::WriteDCMotor(0, 0);
+        RedRobot::WriteDCMotor(2, 0);
+        RedRobot::WriteDCMotor(3, 0);
+
+        uint16_t sensorValues[6];
+        RedRobot::ReadLineSensor(sensorValues);
+
+        // Raw discharge time in microseconds: darker surfaces usually read higher.
+        Serial.print("[IR us] ");
+        for (int i = 0; i < 6; ++i) {
+            Serial.print("LF");
+            Serial.print(i);
+            Serial.print("=");
+            Serial.print(sensorValues[i]);
+            Serial.print(" ");
+        }
+        Serial.println();
+        delay(200);
+        return;
+    }
 
     if (!started) { // e.g. get out of the starting box
         started = true;
@@ -57,9 +80,9 @@ void AutonomousLoop() {
     // remember that the below code will run repeatedly since we are in
     // the AutonomousLoop!
 
-    // The ramp channel is owned by its manual controls.
+    // The claw servo is owned by its manual controls.
     for (uint8_t channel = 0; channel < 4; ++channel)
-      if (channel != RAMP_SERVO_CHANNEL)
+      if (channel != CLAW_SERVO_CHANNEL)
         RedRobot::SetServo(channel, 0);
 
     // move forward at speed 50
@@ -74,7 +97,7 @@ void AutonomousLoop() {
 
     // Set the other servos to the demo positions.
     for (uint8_t channel = 0; channel < 4; ++channel)
-      if (channel != RAMP_SERVO_CHANNEL)
+      if (channel != CLAW_SERVO_CHANNEL)
         RedRobot::SetServo(channel, channel % 2 == 0 ? 90 : 180);
 
     delay(500);

@@ -1,5 +1,5 @@
 #include "../RedRobot.h"
-#include "../RampServoConfig.h"
+#include "../MechanismConfig.h"
 
 bool useTankDrive = false;
 
@@ -22,6 +22,8 @@ namespace RobotControl {
     activeMode = mode;
     // Switching mechanisms clears input held in the previous mode.
     ClearHeldDirectionInputs();
+    RedRobot::WriteDCMotor(RAMP_MOTOR_CHANNEL, 0);
+    if (RAMP_MOTOR_CHANNEL != 0) RedRobot::WriteDCMotor(0, 0);
     RedRobot::WriteDCMotor(2, 0);
     RedRobot::WriteDCMotor(3, 0);
   }
@@ -45,25 +47,39 @@ namespace Bluefruit
       return;
 
     if (Button < UP || Button > RIGHT) return;
-    if (activeMode == RobotControl::Mode::RampServo)
+    auto &button_pressed = bluefruitDirections;
+    button_pressed[Button] = buttonPressedDown;
+
+    if (activeMode == RobotControl::Mode::RampMotor)
+    {
+      int ramp_speed = 0;
+      if (button_pressed[UP] && !button_pressed[DOWN])
+      {
+        ramp_speed = RAMP_UP_POWER;
+      }
+      if (button_pressed[DOWN] && !button_pressed[UP])
+      {
+        ramp_speed = RAMP_DOWN_POWER;
+      }
+      RedRobot::WriteDCMotor(RAMP_MOTOR_CHANNEL, ramp_speed);
+      return;
+    }
+
+    if (activeMode == RobotControl::Mode::ClawServo)
     {
       if (!buttonPressedDown) return;
 
       // Convert HS-311 degrees to the existing servo driver's scale.
       if (Button == LEFT)
       {
-        RedRobot::SetServo(RAMP_SERVO_CHANNEL, RAMP_LEFT_ANGLE_DEGREES * 180 / 100);
+        RedRobot::SetServo(CLAW_SERVO_CHANNEL, CLAW_LEFT_ANGLE_DEGREES * 180 / 100);
       }
       if (Button == RIGHT)
       {
-        RedRobot::SetServo(RAMP_SERVO_CHANNEL, RAMP_RIGHT_ANGLE_DEGREES * 180 / 100);
+        RedRobot::SetServo(CLAW_SERVO_CHANNEL, CLAW_RIGHT_ANGLE_DEGREES * 180 / 100);
       }
       return;
     }
-
-    auto &button_pressed = bluefruitDirections;
-
-    button_pressed[Button] = (buttonPressedDown == true);
 
     // TODO: edit your speed output to the yellow motors below!
     // stop = 0, slow = 50, fast = 100
@@ -106,20 +122,20 @@ namespace Bluefruit
   void Button2_Pressed(bool buttonPressedDown)
   {
     if (buttonPressedDown) RobotControl::SelectMode(RobotControl::Mode::Drive);
-    // Keep the example arm control separate from the HS-311 ramp channel.
+    // Keep the example arm control separate from the claw servo.
     for (uint8_t channel = 0; channel < 4; ++channel)
-      if (channel != RAMP_SERVO_CHANNEL)
+      if (channel != CLAW_SERVO_CHANNEL)
         RedRobot::SetServo(channel, buttonPressedDown ? 180 : 0);
   }
 
   void Button3_Pressed(bool buttonPressedDown)
   {
-    if (buttonPressedDown) RobotControl::SelectMode(RobotControl::Mode::Drive);
+    if (buttonPressedDown) RobotControl::SelectMode(RobotControl::Mode::RampMotor);
   }
 
   void Button4_Pressed(bool buttonPressedDown)
   {
-    if (buttonPressedDown) RobotControl::SelectMode(RobotControl::Mode::RampServo);
+    if (buttonPressedDown) RobotControl::SelectMode(RobotControl::Mode::ClawServo);
   }
 
 }
@@ -162,25 +178,39 @@ namespace RR_Controller
   void DPad_Pressed(button_t Button, bool buttonPressedDown)
   {
     if (Button < UP || Button > CENTER) return;
-    if (activeMode == RobotControl::Mode::RampServo)
+    auto &button_pressed = rrDirections;
+    button_pressed[Button] = buttonPressedDown;
+
+    if (activeMode == RobotControl::Mode::RampMotor)
+    {
+      int ramp_speed = 0;
+      if (button_pressed[UP] && !button_pressed[DOWN])
+      {
+        ramp_speed = RAMP_UP_POWER;
+      }
+      if (button_pressed[DOWN] && !button_pressed[UP])
+      {
+        ramp_speed = RAMP_DOWN_POWER;
+      }
+      RedRobot::WriteDCMotor(RAMP_MOTOR_CHANNEL, ramp_speed);
+      return;
+    }
+
+    if (activeMode == RobotControl::Mode::ClawServo)
     {
       if (!buttonPressedDown) return;
 
       // Convert HS-311 degrees to the existing servo driver's scale.
       if (Button == LEFT)
       {
-        RedRobot::SetServo(RAMP_SERVO_CHANNEL, RAMP_LEFT_ANGLE_DEGREES * 180 / 100);
+        RedRobot::SetServo(CLAW_SERVO_CHANNEL, CLAW_LEFT_ANGLE_DEGREES * 180 / 100);
       }
       if (Button == RIGHT)
       {
-        RedRobot::SetServo(RAMP_SERVO_CHANNEL, RAMP_RIGHT_ANGLE_DEGREES * 180 / 100);
+        RedRobot::SetServo(CLAW_SERVO_CHANNEL, CLAW_RIGHT_ANGLE_DEGREES * 180 / 100);
       }
       return;
     }
-
-    auto &button_pressed = rrDirections;
-
-    button_pressed[Button] = (buttonPressedDown == true);
 
     // TODO: edit your speed output to the yellow motors below!
     // stop = 0, slow = 50, fast = 100
@@ -236,9 +266,14 @@ namespace RR_Controller
 
   void ButtonA_Pressed(bool buttonPressedDown)
   {
-    if (buttonPressedDown) RobotControl::SelectMode(RobotControl::Mode::Drive);
-
-    // Motor 0 runs in one direction at full power only while A is held.
-    RedRobot::WriteDCMotor(0, buttonPressedDown ? 100 : 0);
+    if (buttonPressedDown)
+    {
+      RobotControl::SelectMode(RobotControl::Mode::Drive);
+      RedRobot::WriteDCMotor(0, 100);
+    }
+    else if (activeMode == RobotControl::Mode::Drive)
+    {
+      RedRobot::WriteDCMotor(0, 0);
+    }
   }
 }

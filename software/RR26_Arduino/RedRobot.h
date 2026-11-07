@@ -49,7 +49,7 @@ bool IsRemoteControlled();
 }
 
 namespace RobotControl {
-  enum class Mode { Drive, RampServo };
+  enum class Mode { Drive, RampMotor, ClawServo };
 
   // Select a mechanism on button PRESS. Another mechanism button changes it;
   // releasing a button or selecting the same mode does not leave that mode.
