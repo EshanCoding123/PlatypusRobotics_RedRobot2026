@@ -166,7 +166,7 @@ namespace RR_Controller
     RedRobot::WriteDCMotor(2, constrain(left_speed, -100, 100));
     RedRobot::WriteDCMotor(3, constrain(right_speed, -100, 100));
   }
-
+  
   void ButtonX_Pressed(bool buttonPressedDown)
   {
     if (!RedRobot::IsRemoteControlled() && buttonPressedDown)

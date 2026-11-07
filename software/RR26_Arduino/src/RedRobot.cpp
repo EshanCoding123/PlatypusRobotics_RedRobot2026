@@ -122,7 +122,9 @@ namespace DCMotor {
     if (speed == 0) {
       mcpwm_set_duty(mc[motor].unit, mc[motor].timer, MCPWM_OPR_A, 0.0f);
       digitalWrite(dc_phase[motor], LOW);
-      Serial.printf("[DC_MOTOR] Motor %d STOP (Duty: 0, Phase: LOW)\n", motor);
+      #ifdef REDROBOT_DEBUG
+        Serial.printf("[DC_MOTOR] Motor %d STOP (Duty: 0, Phase: LOW)\n", motor);
+      #endif
       return;
     }
 
