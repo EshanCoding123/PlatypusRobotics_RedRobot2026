@@ -1,6 +1,36 @@
 #include "../RedRobot.h"
+#include "../RampServoConfig.h"
 
 bool useTankDrive = false;
+
+namespace {
+  RobotControl::Mode activeMode = RobotControl::Mode::Drive;
+  bool bluefruitDirections[4] = {};
+  bool rrDirections[5] = {};
+
+  void ClearHeldDirectionInputs() {
+    for (bool &pressed : bluefruitDirections) pressed = false;
+    for (bool &pressed : rrDirections) pressed = false;
+  }
+
+}
+
+namespace RobotControl {
+  void SelectMode(Mode mode) {
+    if (activeMode == mode) return;
+
+    activeMode = mode;
+    // Switching mechanisms clears input held in the previous mode.
+    ClearHeldDirectionInputs();
+    RedRobot::WriteDCMotor(2, 0);
+    RedRobot::WriteDCMotor(3, 0);
+  }
+
+  void ResetOnDisconnect() {
+    activeMode = Mode::Drive;
+    ClearHeldDirectionInputs();
+  }
+}
 
 namespace Bluefruit
 {
@@ -14,8 +44,24 @@ namespace Bluefruit
     if (!RedRobot::IsRemoteControlled())
       return;
 
-    // values stay the same between calls to DPad_Pressed
-    static bool button_pressed[4] = {false, false, false, false};
+    if (Button < UP || Button > RIGHT) return;
+    if (activeMode == RobotControl::Mode::RampServo)
+    {
+      if (!buttonPressedDown) return;
+
+      // Convert HS-311 degrees to the existing servo driver's scale.
+      if (Button == LEFT)
+      {
+        RedRobot::SetServo(RAMP_SERVO_CHANNEL, RAMP_LEFT_ANGLE_DEGREES * 180 / 100);
+      }
+      if (Button == RIGHT)
+      {
+        RedRobot::SetServo(RAMP_SERVO_CHANNEL, RAMP_RIGHT_ANGLE_DEGREES * 180 / 100);
+      }
+      return;
+    }
+
+    auto &button_pressed = bluefruitDirections;
 
     button_pressed[Button] = (buttonPressedDown == true);
 
@@ -54,42 +100,28 @@ namespace Bluefruit
 
   void Button1_Pressed(bool buttonPressedDown)
   {
-    if (!RedRobot::IsRemoteControlled() && buttonPressedDown)
-    {
-      RedRobot::StartRemoteControl();
-
-      // start remote controlled with the DC motors off
-      RedRobot::WriteDCMotor(2, 0);
-      RedRobot::WriteDCMotor(3, 0);
-    }
+    if (buttonPressedDown) RobotControl::SelectMode(RobotControl::Mode::Drive);
   }
 
   void Button2_Pressed(bool buttonPressedDown)
   {
-    // Ex: move an arm when the button is pressed
-    if (buttonPressedDown)
-    {
-      RedRobot::SetServo(0, 180);
-      RedRobot::SetServo(1, 180);
-      RedRobot::SetServo(2, 180);
-      RedRobot::SetServo(3, 180);
-    }
-    else
-    {
-      RedRobot::SetServo(0, 0);
-      RedRobot::SetServo(1, 0);
-      RedRobot::SetServo(2, 0);
-      RedRobot::SetServo(3, 0);
-    }
+    if (buttonPressedDown) RobotControl::SelectMode(RobotControl::Mode::Drive);
+    // Keep the example arm control separate from the HS-311 ramp channel.
+    for (uint8_t channel = 0; channel < 4; ++channel)
+      if (channel != RAMP_SERVO_CHANNEL)
+        RedRobot::SetServo(channel, buttonPressedDown ? 180 : 0);
   }
 
   void Button3_Pressed(bool buttonPressedDown)
   {
+    if (buttonPressedDown) RobotControl::SelectMode(RobotControl::Mode::Drive);
   }
 
   void Button4_Pressed(bool buttonPressedDown)
   {
+    if (buttonPressedDown) RobotControl::SelectMode(RobotControl::Mode::RampServo);
   }
+
 }
 
 namespace RR_Controller
@@ -129,8 +161,24 @@ namespace RR_Controller
    */
   void DPad_Pressed(button_t Button, bool buttonPressedDown)
   {
-    // values stay the same between calls to DPad_Pressed
-    static bool button_pressed[5] = {false, false, false, false, false};
+    if (Button < UP || Button > CENTER) return;
+    if (activeMode == RobotControl::Mode::RampServo)
+    {
+      if (!buttonPressedDown) return;
+
+      // Convert HS-311 degrees to the existing servo driver's scale.
+      if (Button == LEFT)
+      {
+        RedRobot::SetServo(RAMP_SERVO_CHANNEL, RAMP_LEFT_ANGLE_DEGREES * 180 / 100);
+      }
+      if (Button == RIGHT)
+      {
+        RedRobot::SetServo(RAMP_SERVO_CHANNEL, RAMP_RIGHT_ANGLE_DEGREES * 180 / 100);
+      }
+      return;
+    }
+
+    auto &button_pressed = rrDirections;
 
     button_pressed[Button] = (buttonPressedDown == true);
 
@@ -169,34 +217,26 @@ namespace RR_Controller
   
   void ButtonX_Pressed(bool buttonPressedDown)
   {
-    if (!RedRobot::IsRemoteControlled() && buttonPressedDown)
-    {
-      RedRobot::StartRemoteControl();
-
-      // start remote controlled with the DC motors off
-      RedRobot::WriteDCMotor(2, 0);
-      RedRobot::WriteDCMotor(3, 0);
-    }
+    if (buttonPressedDown) RobotControl::SelectMode(RobotControl::Mode::Drive);
   }
 
   void ButtonY_Pressed(bool buttonPressedDown)
   {
     Serial.printf("Y pressed\n");
-    if (buttonPressedDown)
+    if (buttonPressedDown) {
+      RobotControl::SelectMode(RobotControl::Mode::Drive);
       useTankDrive = !useTankDrive;
+    }
   }
 
   void ButtonB_Pressed(bool buttonPressedDown)
   {
+    if (buttonPressedDown) RobotControl::SelectMode(RobotControl::Mode::Drive);
   }
 
   void ButtonA_Pressed(bool buttonPressedDown)
   {
-    if (buttonPressedDown)
-    {
-      // Enter remote control and stop autonomous driving if needed.
-      ButtonX_Pressed(true);
-    }
+    if (buttonPressedDown) RobotControl::SelectMode(RobotControl::Mode::Drive);
 
     // Motor 0 runs in one direction at full power only while A is held.
     RedRobot::WriteDCMotor(0, buttonPressedDown ? 100 : 0);

@@ -31,13 +31,17 @@ char gDeviceName[22]; // 6 header + up to 15 team name + \0
 class ServerCallbacks : public NimBLEServerCallbacks {
   void onConnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo) override {
     deviceConnected = true;
+    RedRobot::StartRemoteControl();
+    RedRobot::Brake();
     Serial.println("[BLE] Client connected");
   }
 
   void onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo,
                     int reason) override {
     deviceConnected = false;
+    RobotControl::ResetOnDisconnect();
     RedRobot::Brake();
+    RedRobot::InitAuton();
     Serial.printf("[BLE] Client disconnected (reason 0x%X)\n", reason);
   }
 };

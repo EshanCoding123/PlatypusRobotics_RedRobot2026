@@ -48,6 +48,17 @@ void StartRemoteControl();
 bool IsRemoteControlled();
 }
 
+namespace RobotControl {
+  enum class Mode { Drive, RampServo };
+
+  // Select a mechanism on button PRESS. Another mechanism button changes it;
+  // releasing a button or selecting the same mode does not leave that mode.
+  void SelectMode(Mode mode);
+
+  // Separate connection cleanup; normal mode changes use SelectMode above.
+  void ResetOnDisconnect();
+}
+
 namespace Bluefruit {
     enum button_t {
     UP = 0,

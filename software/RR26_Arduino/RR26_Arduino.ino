@@ -7,6 +7,7 @@
 // Libraries with driver code (don't remove these!)
 #include <Arduino.h>                // make sure this is first
 #include "RedRobot.h"
+#include "RampServoConfig.h"
 
 // Declare some global variables
 bool started; // boolean (true or false) to keep track of if we should start
@@ -18,8 +19,8 @@ void setup() {
   RedRobot::InitRedRobot();         // call this first
   RedRobot::InitDCMotors();
   RedRobot::InitServo();
+  RedRobot::SetServo(RAMP_SERVO_CHANNEL, RAMP_CENTER_ANGLE_DEGREES * 180 / 100);
   RedRobot::InitLineSensors();
-  RedRobot::InitAuton();            // call this to activate the AutonomousLoop
 
   // Initialize our variables
   started = false;
@@ -56,11 +57,10 @@ void AutonomousLoop() {
     // remember that the below code will run repeatedly since we are in
     // the AutonomousLoop!
 
-    // set all servos to angle 0
-    RedRobot::SetServo(0, 0);
-    RedRobot::SetServo(1, 0);
-    RedRobot::SetServo(2, 0);
-    RedRobot::SetServo(3, 0);
+    // The ramp channel is owned by its manual controls.
+    for (uint8_t channel = 0; channel < 4; ++channel)
+      if (channel != RAMP_SERVO_CHANNEL)
+        RedRobot::SetServo(channel, 0);
 
     // move forward at speed 50
     RedRobot::WriteDCMotor(2, 50);
@@ -72,11 +72,10 @@ void AutonomousLoop() {
     RedRobot::WriteDCMotor(2, 0);
     RedRobot::WriteDCMotor(3, 0);
 
-    // set the motors to different angles
-    RedRobot::SetServo(0, 90);
-    RedRobot::SetServo(1, 180);
-    RedRobot::SetServo(2, 90);
-    RedRobot::SetServo(3, 180);
+    // Set the other servos to the demo positions.
+    for (uint8_t channel = 0; channel < 4; ++channel)
+      if (channel != RAMP_SERVO_CHANNEL)
+        RedRobot::SetServo(channel, channel % 2 == 0 ? 90 : 180);
 
     delay(500);
 
