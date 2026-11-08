@@ -7,6 +7,7 @@ namespace {
   RobotControl::Mode activeMode = RobotControl::Mode::Drive;
   bool bluefruitDirections[4] = {};
   bool rrDirections[5] = {};
+  int lastXboxClawDirection = 0;
 
   void ClearHeldDirectionInputs() {
     for (bool &pressed : bluefruitDirections) pressed = false;
@@ -16,6 +17,24 @@ namespace {
 }
 
 namespace RobotControl {
+  void ApplyXboxInput(int turn, int drive, int ramp, int claw) {
+    const int left = drive + turn;
+    const int right = drive - turn;
+    const int scale = max(100, max(abs(left), abs(right)));
+    RedRobot::WriteDCMotor(2, left * 100 / scale);
+    RedRobot::WriteDCMotor(3, right * 100 / scale);
+
+    const int rampPower = ramp > 0 ? RAMP_UP_POWER : ramp < 0 ? RAMP_DOWN_POWER : 0;
+    RedRobot::WriteDCMotor(RAMP_MOTOR_CHANNEL, rampPower);
+    if (claw != 0 && claw != lastXboxClawDirection) {
+      const int angle = claw < 0 ? CLAW_LEFT_ANGLE_DEGREES : CLAW_RIGHT_ANGLE_DEGREES;
+      // Match the combined mechanism mode, using configured driver values.
+      for (uint8_t channel = 0; channel < 4; ++channel)
+        RedRobot::SetServo(channel, angle);
+    }
+    lastXboxClawDirection = claw;
+  }
+
   void SelectMode(Mode mode) {
     if (activeMode == mode) return;
 
@@ -30,6 +49,7 @@ namespace RobotControl {
 
   void ResetOnDisconnect() {
     activeMode = Mode::Drive;
+    lastXboxClawDirection = 0;
     ClearHeldDirectionInputs();
   }
 }

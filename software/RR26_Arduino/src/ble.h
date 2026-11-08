@@ -8,12 +8,17 @@
 #include <Arduino.h>
 #include <NimBLEDevice.h>
 #include <esp_mac.h>
+#include <mutex>
 
 #include "../CONFIGURE-ME.h"
 #include "pinouts.h"
 #include "../RedRobot.h"
 
 extern void ParseBluetoothCommands(char *buf, size_t len);
+
+namespace RobotControl {
+void ApplyXboxInput(int turn, int drive, int ramp, int claw);
+}
 
 // Set to 1 for one boot to wipe stale bonds (e.g. after changing security
 // settings or if a phone refuses to reconnect), then set back to 0.
@@ -25,12 +30,53 @@ extern void ParseBluetoothCommands(char *buf, size_t len);
 #define CHARACTERISTIC_UUID_TX "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"
 
 namespace {
-volatile bool deviceConnected = false;
+constexpr uint16_t NO_CONTROLLER = 0xffff;
+constexpr uint32_t XBOX_TIMEOUT_MS = 300;
+std::mutex controllerMutex;
+uint16_t controllerHandle = NO_CONTROLLER;
+bool xboxSession = false;
+bool xboxArmed = false;
+uint32_t lastXboxPacket = 0;
 char gDeviceName[22]; // 6 header + up to 15 team name + \0 
+
+void CheckXboxTimeout(uint32_t now) {
+  if (xboxArmed && now - lastXboxPacket >= XBOX_TIMEOUT_MS) {
+    xboxArmed = false;
+    RobotControl::ApplyXboxInput(0, 0, 0, 0);
+  }
+}
+
+void HandleXboxPacket(const uint8_t *data, size_t len) {
+  // !X, turn+100, drive+100, ramp+1, claw+1.
+  if (len != 6 || data[2] > 200 || data[3] > 200 ||
+      data[4] > 2 || data[5] > 2) return;
+
+  if (!xboxSession) {
+    xboxSession = true;
+    RobotControl::ResetOnDisconnect();
+    RedRobot::Brake();
+  }
+  const uint32_t now = millis();
+  CheckXboxTimeout(now);
+  const int turn = data[2] - 100;
+  const int drive = data[3] - 100;
+  const int ramp = data[4] - 1;
+  const int claw = data[5] - 1;
+  // Require neutral input after connecting or losing the command stream.
+  if (!xboxArmed && (turn || drive || ramp || claw)) return;
+  xboxArmed = true;
+  lastXboxPacket = now;
+  RobotControl::ApplyXboxInput(turn, drive, ramp, claw);
+}
 
 class ServerCallbacks : public NimBLEServerCallbacks {
   void onConnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo) override {
-    deviceConnected = true;
+    std::lock_guard<std::mutex> lock(controllerMutex);
+    if (controllerHandle != NO_CONTROLLER) {
+      pServer->disconnect(connInfo);
+      return;
+    }
+    controllerHandle = connInfo.getConnHandle();
     RedRobot::StartRemoteControl();
     RedRobot::Brake();
     Serial.println("[BLE] Client connected");
@@ -38,10 +84,14 @@ class ServerCallbacks : public NimBLEServerCallbacks {
 
   void onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo,
                     int reason) override {
-    deviceConnected = false;
+    std::lock_guard<std::mutex> lock(controllerMutex);
+    if (connInfo.getConnHandle() != controllerHandle) return;
+    controllerHandle = NO_CONTROLLER;
     RobotControl::ResetOnDisconnect();
     RedRobot::Brake();
-    RedRobot::InitAuton();
+    if (!xboxSession) RedRobot::InitAuton();
+    xboxSession = false;
+    xboxArmed = false;
     Serial.printf("[BLE] Client disconnected (reason 0x%X)\n", reason);
   }
 };
@@ -49,10 +99,18 @@ class ServerCallbacks : public NimBLEServerCallbacks {
 class RxCallbacks : public NimBLECharacteristicCallbacks {
   void onWrite(NimBLECharacteristic *pCharacteristic,
                NimBLEConnInfo &connInfo) override {
+    std::lock_guard<std::mutex> lock(controllerMutex);
+    if (connInfo.getConnHandle() != controllerHandle) return;
     NimBLEAttValue rxValue = pCharacteristic->getValue();
     size_t len = rxValue.length();
     if (len == 0)
       return;
+    const uint8_t *data = rxValue.data();
+    if (len >= 2 && data[0] == '!' && data[1] == 'X') {
+      HandleXboxPacket(data, len);
+      return;
+    }
+    if (xboxSession) return;
 
     // Copy into a NUL-terminated buffer so sscanf can't run past the data
     char buf[32];
@@ -77,8 +135,16 @@ bool startAdv() {
 
 // Backstop: if advertising ever stops while no client is connected, restart it
 void advWatchdogTask(void *) {
+  uint32_t lastAdvCheck = millis();
   for (;;) {
-    vTaskDelay(pdMS_TO_TICKS(2000));
+    vTaskDelay(pdMS_TO_TICKS(25));
+    const uint32_t now = millis();
+    {
+      std::lock_guard<std::mutex> lock(controllerMutex);
+      CheckXboxTimeout(millis());
+    }
+    if (now - lastAdvCheck < 2000) continue;
+    lastAdvCheck = now;
     NimBLEServer *srv = NimBLEDevice::getServer();
     bool connected = srv && srv->getConnectedCount() > 0;
     bool advertising = NimBLEDevice::getAdvertising()->isAdvertising();
