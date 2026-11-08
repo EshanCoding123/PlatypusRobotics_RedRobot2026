@@ -1,4 +1,4 @@
-"""Pair the controller with your computer, then run xbox_bridge.py ROBOT_BLE_NAME.
+"""Pair the controller with your computer, then run xbox_bridge.py.
 
 On macOS use python3. Install dependencies with: python3 -m pip install bleak pygame
 """
@@ -6,10 +6,14 @@ On macOS use python3. Install dependencies with: python3 -m pip install bleak py
 import argparse
 import asyncio
 import os
+import sys
+from concurrent.futures import Future, ThreadPoolExecutor
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
 
 RX_UUID = "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"
+ROBOT_NAME = "RR-11-platypus"
 NEUTRAL = b"!X" + bytes((100, 100, 1, 1))
 
 
@@ -63,8 +67,72 @@ def command(gamepad):
     ))
 
 
-async def run(robot_name, slot):
-    from bleak import BleakClient, BleakScanner
+@asynccontextmanager
+async def bluetooth_connection(robot_name):
+    # Keep all WinRT calls on one fresh thread, separate from SDL's COM setup.
+    ready = Future()
+
+    async def keep_alive():
+        stopped = asyncio.Event()
+        ready.set_result((asyncio.get_running_loop(), stopped))
+        await stopped.wait()
+
+    def worker():
+        try:
+            asyncio.run(keep_alive())
+        except BaseException as error:
+            if not ready.done():
+                ready.set_exception(error)
+            raise
+
+    with ThreadPoolExecutor(max_workers=1, thread_name_prefix="robot-bluetooth") as executor:
+        worker_result = executor.submit(worker)
+        loop, stopped = await asyncio.wrap_future(ready)
+
+        async def invoke(operation):
+            return await asyncio.wrap_future(asyncio.run_coroutine_threadsafe(operation, loop))
+
+        async def connect():
+            from bleak import BleakClient, BleakScanner
+
+            device = await BleakScanner.find_device_by_filter(
+                lambda _device, advertisement: advertisement.local_name == robot_name
+            )
+            if device is None:
+                raise RuntimeError(f"Could not find {robot_name}. Check its BLE name and connection.")
+            client = BleakClient(device)
+            try:
+                await client.connect()
+            except BaseException:
+                await client.disconnect()
+                raise
+            return client
+
+        async def send(packet):
+            await invoke(asyncio.wait_for(client.write_gatt_char(RX_UUID, packet, response=True), 2.0))
+
+        async def disconnect():
+            try:
+                if client.is_connected:
+                    await asyncio.wait_for(client.write_gatt_char(RX_UUID, NEUTRAL, response=True), 2.0)
+            finally:
+                await client.disconnect()
+
+        try:
+            client = await invoke(connect())
+            try:
+                yield send
+            finally:
+                await invoke(disconnect())
+        finally:
+            loop.call_soon_threadsafe(stopped.set)
+            await asyncio.wrap_future(worker_result)
+
+
+async def run(robot_name, slot, debug=False):
+    if sys.platform == "win32":
+        # Prevent Python COM imports from selecting a GUI-only callback model.
+        sys.coinit_flags = 0
 
     os.environ["SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS"] = "1"
     os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
@@ -89,28 +157,30 @@ async def run(robot_name, slot):
             raise RuntimeError(f"No supported controller at index {slot}.")
         controller = controllers.Controller(slot)
         print(f"Using controller {slot}.")
+        print(f"Looking for robot {robot_name}...")
 
-        device = await BleakScanner.find_device_by_filter(
-            lambda _device, advertisement: advertisement.local_name == robot_name
-        )
-        if device is None:
-            raise RuntimeError(f"Could not find {robot_name}. Check its BLE name and connection.")
-
-        async with BleakClient(device) as client:
-            try:
-                await client.write_gatt_char(RX_UUID, NEUTRAL, response=True)
-                print("Connected. Release RB, then hold RB to enable the sticks. Ctrl+C exits.")
-                enable_seen_released = False
-                while client.is_connected:
-                    gamepad = read_gamepad(controller, pygame)
-                    if not gamepad.right_bumper:
-                        enable_seen_released = True
-                    packet = command(gamepad) if enable_seen_released else NEUTRAL
-                    await client.write_gatt_char(RX_UUID, packet, response=True)
-                    await asyncio.sleep(0.04)
-            finally:
-                if client.is_connected:
-                    await client.write_gatt_char(RX_UUID, NEUTRAL, response=True)
+        async with bluetooth_connection(robot_name) as send:
+            await send(NEUTRAL)
+            print("Connected. Release RB, then hold RB to enable the sticks. Ctrl+C exits.")
+            print("Left stick drives. Right stick up/down runs the ramp; left/right moves the claw. Move it past halfway.")
+            enable_seen_released = False
+            last_debug_time = 0.0
+            while True:
+                gamepad = read_gamepad(controller, pygame)
+                if not gamepad.right_bumper:
+                    enable_seen_released = True
+                packet = command(gamepad) if enable_seen_released else NEUTRAL
+                await send(packet)
+                now = asyncio.get_running_loop().time()
+                if debug and now - last_debug_time >= 0.5:
+                    print(
+                        f"RB={int(gamepad.right_bumper)} "
+                        f"right=({gamepad.right_x}, {gamepad.right_y}) "
+                        f"sent ramp={packet[4] - 1} claw={packet[5] - 1}",
+                        flush=True,
+                    )
+                    last_debug_time = now
+                await asyncio.sleep(0.04)
     finally:
         controllers.quit()
         pygame.quit()
@@ -118,11 +188,12 @@ async def run(robot_name, slot):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("robot_name", help="BLE device name, for example RR-11-platypus")
+    parser.add_argument("robot_name", nargs="?", default=ROBOT_NAME, help=f"BLE device name (default: {ROBOT_NAME})")
     parser.add_argument("--slot", type=int, help="Controller index (default: detect automatically)")
+    parser.add_argument("--debug", action="store_true", help="Show right-stick readings and transmitted mechanism commands")
     args = parser.parse_args()
     try:
-        asyncio.run(run(args.robot_name, args.slot))
+        asyncio.run(run(args.robot_name, args.slot, args.debug))
     except KeyboardInterrupt:
         pass
     except ModuleNotFoundError as error:
