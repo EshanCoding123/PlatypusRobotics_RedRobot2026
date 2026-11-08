@@ -19,7 +19,7 @@ upload to the robot and physical behavior have not been confirmed.
 configuration this is also the ramp motor.
 - Numbered **2** returns to drive mode and no longer moves a servo.
 
-Settings are in `MechanismConfig.h`: ramp motor 0 at +100/-100, and claw
+Settings are in `MechanismConfig.h`: ramp motor 0 at +50/-50, and claw
 servo commands -180 and 180, centered at 0. These are driver values, not measured
 angles. Adjust the channel, power, direction signs and positions for the actual
 mechanism. Motor commands are capped

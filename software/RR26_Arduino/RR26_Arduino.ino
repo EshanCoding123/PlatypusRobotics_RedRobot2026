@@ -38,8 +38,8 @@ constexpr uint8_t WIDE_BLACK_SENSOR_COUNT = 5;
 constexpr int16_t BASE_DRIVE_SPEED = 100;
 constexpr int16_t MAX_DRIVE_SPEED = 100;
 constexpr int16_t MAX_STEERING_CORRECTION = 100;
-constexpr float STEERING_KP = 85.0f;
-constexpr float STEERING_KD = 30.0f;
+constexpr float STEERING_KP = 100.0f;
+constexpr float STEERING_KD = 40.0f;
 
 constexpr int16_t RECOVERY_FORWARD_SPEED = 15;
 constexpr int16_t RECOVERY_TURN_SPEED = 24;
