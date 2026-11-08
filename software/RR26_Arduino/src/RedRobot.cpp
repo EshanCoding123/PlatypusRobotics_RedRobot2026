@@ -107,6 +107,8 @@ namespace DCMotor {
     Serial.println("[DC_MOTOR] Initializing channels...");
 
     for (int i = 0; i < 4; i++) {
+      // Motor 1 is disabled; its enable pin is used by the line sensors.
+      if (i == 1) continue;
       // 1. Route the MCPWM output signal to the EN pin
       mcpwm_gpio_init(mc[i].unit, mc[i].signal, dc_en[i]);
 
@@ -477,7 +479,7 @@ void WriteDCMotor(uint8_t d, int16_t speed) {
 
 static void Brake() {
     for (uint8_t i = 0; i < 4; i++)
-      WriteDCMotor(i, 0);
+      if (i != 1) WriteDCMotor(i, 0);
 }
 
 void SetServo(uint8_t s, int16_t angle) {

@@ -36,20 +36,26 @@ std::mutex controllerMutex;
 uint16_t controllerHandle = NO_CONTROLLER;
 bool xboxSession = false;
 bool xboxArmed = false;
+bool xboxAutonomous = false;
 uint32_t lastXboxPacket = 0;
 char gDeviceName[22]; // 6 header + up to 15 team name + \0 
 
 void CheckXboxTimeout(uint32_t now) {
   if (xboxArmed && now - lastXboxPacket >= XBOX_TIMEOUT_MS) {
     xboxArmed = false;
+    xboxAutonomous = false;
+    RedRobot::StartRemoteControl();
     RobotControl::ApplyXboxInput(0, 0, 0, 0);
   }
 }
 
 void HandleXboxPacket(const uint8_t *data, size_t len) {
-  // !X, turn+100, drive+100, ramp+1, claw+1.
-  if (len != 6 || data[2] > 200 || data[3] > 200 ||
+  // !X, turn+100, drive+100, ramp+1, claw+1, optional autonomous flag.
+  // Six-byte packets retain the original manual-control behavior.
+  if ((len != 6 && len != 7) || data[2] > 200 || data[3] > 200 ||
       data[4] > 2 || data[5] > 2) return;
+  if (len == 7 && data[6] > 1) return;
+  const bool autonomous = len == 7 && data[6] == 1;
 
   if (!xboxSession) {
     xboxSession = true;
@@ -62,11 +68,21 @@ void HandleXboxPacket(const uint8_t *data, size_t len) {
   const int drive = data[3] - 100;
   const int ramp = data[4] - 1;
   const int claw = data[5] - 1;
-  // Require neutral input after connecting or losing the command stream.
-  if (!xboxArmed && (turn || drive || ramp || claw)) return;
+  // After a timeout, autonomous heartbeats cannot restart the robot.
+  // A neutral manual packet (View button) must rearm it first.
+  if (!xboxArmed && (turn || drive || ramp || claw || autonomous)) return;
+  if (autonomous && (turn || drive || ramp || claw)) return;
   xboxArmed = true;
   lastXboxPacket = now;
-  RobotControl::ApplyXboxInput(turn, drive, ramp, claw);
+  if (autonomous != xboxAutonomous) {
+    RedRobot::StartRemoteControl();
+    RedRobot::Brake();
+    RobotControl::ResetOnDisconnect();
+    xboxAutonomous = autonomous;
+    if (autonomous) RedRobot::InitAuton();
+    Serial.printf("[Xbox] Mode: %s\n", autonomous ? "autonomous" : "manual");
+  }
+  if (!autonomous) RobotControl::ApplyXboxInput(turn, drive, ramp, claw);
 }
 
 class ServerCallbacks : public NimBLEServerCallbacks {
@@ -87,11 +103,13 @@ class ServerCallbacks : public NimBLEServerCallbacks {
     std::lock_guard<std::mutex> lock(controllerMutex);
     if (connInfo.getConnHandle() != controllerHandle) return;
     controllerHandle = NO_CONTROLLER;
+    if (xboxSession) RedRobot::StartRemoteControl();
     RobotControl::ResetOnDisconnect();
     RedRobot::Brake();
     if (!xboxSession) RedRobot::InitAuton();
     xboxSession = false;
     xboxArmed = false;
+    xboxAutonomous = false;
     Serial.printf("[BLE] Client disconnected (reason 0x%X)\n", reason);
   }
 };
@@ -192,8 +210,9 @@ void init() {
   NimBLEService *pService = pServer->createService(SERVICE_UUID);
 
   // TX (ESP32 -> app). CCCD is added automatically for NOTIFY.
-  pService->createCharacteristic(CHARACTERISTIC_UUID_TX,
-                                 NIMBLE_PROPERTY::NOTIFY);
+  NimBLECharacteristic *pTx = pService->createCharacteristic(
+      CHARACTERISTIC_UUID_TX, NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ);
+  pTx->setValue("RR26-XBOX-3");
 
   // RX (app -> ESP32)
   NimBLECharacteristic *pRx = pService->createCharacteristic(
