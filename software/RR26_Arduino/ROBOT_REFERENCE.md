@@ -5,20 +5,24 @@ upload to the robot and physical behavior have not been confirmed.
 
 ## Controller
 
-- Numbered **3** selects ramp motor mode. Hold Up to raise or Down to lower;
-  releasing the direction stops the motor. Both directions held stop it.
+- Numbered **3** selects the combined mechanism mode. Hold Up to raise the ramp
+  or Down to lower it; releasing the direction stops the motor. Press Left or
+  Right once to send all four servo channels to driver commands -180 or 180
+  (500 or 2500 microseconds); they do not need to be held. Both signals exceed
+  the HS-311's specified 900 to 2100 microsecond range. Both Up and Down held
+  stop the ramp.
 - Numbered **4** selects claw servo mode. Left and Right select fixed positions;
   the servo holds its position after release.
 - Pressing another numbered or lettered button leaves the selected mechanism
   mode. Mode changes stop the ramp and clear held directions.
 - RR Controller **A** runs motor 0 at full power while held. With the current
-  configuration this is also the ramp motor.
-- Numbered **2** retains the example servo behavior for channels other than
-  the claw: 180 while held, 0 on release (values on the driver's scale).
+configuration this is also the ramp motor.
+- Numbered **2** returns to drive mode and no longer moves a servo.
 
-Settings are in `MechanismConfig.h`: ramp motor 0 at +100/-100, and HS-311
-claw servo 0 at -15/+15 degrees, centered at 0. Adjust the channel, power,
-direction signs and angles for the actual mechanism. Motor commands are capped
+Settings are in `MechanismConfig.h`: ramp motor 0 at +100/-100, and claw
+servo commands -180 and 180, centered at 0. These are driver values, not measured
+angles. Adjust the channel, power, direction signs and positions for the actual
+mechanism. Motor commands are capped
 at +/-100; motor 1 is disabled and motors 2 and 3 are used for driving.
 
 `src/RemoteControl.cpp` handles the controls. `src/RedRobot.cpp` reads BLE

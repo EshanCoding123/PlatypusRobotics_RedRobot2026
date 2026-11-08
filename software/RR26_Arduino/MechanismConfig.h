@@ -7,7 +7,9 @@ constexpr int RAMP_UP_POWER = 100;
 constexpr int RAMP_DOWN_POWER = -100;
 
 constexpr int CLAW_SERVO_CHANNEL = 0;
-// HS-311 angles relative to center, from -60 to 60 degrees.
-constexpr int CLAW_LEFT_ANGLE_DEGREES = -15;
-constexpr int CLAW_RIGHT_ANGLE_DEGREES = 15;
+// Driver scale: -180..180 maps to 500..2500 us, with 0 at 1500 us.
+// These are driver commands, not measured physical angles; both endpoint
+// pulses exceed the HS-311's specified 900..2100 us range.
+constexpr int CLAW_LEFT_ANGLE_DEGREES = -180;
+constexpr int CLAW_RIGHT_ANGLE_DEGREES = 180;
 constexpr int CLAW_CENTER_ANGLE_DEGREES = 0;

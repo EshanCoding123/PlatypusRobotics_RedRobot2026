@@ -191,6 +191,9 @@ namespace Servo {
 
     // 3. Write the duty cycle to the channel (Core v2 uses channel, not pin)
     ledcWrite(servo_pins[idx], duty);   // pin, not channel
+    // This is the commanded position, not a measurement from the servo.
+    Serial.printf("[SERVO] channel=%d command=%d pulse=%lu us\n",
+                  idx, static_cast<int>(angle), static_cast<unsigned long>(pulse_us));
   }
 } // namespace Servo
 

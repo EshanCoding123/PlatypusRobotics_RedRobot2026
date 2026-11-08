@@ -119,7 +119,7 @@ void setup() {
   RedRobot::InitRedRobot();         // call this first
   RedRobot::InitDCMotors();
   RedRobot::InitServo();
-  RedRobot::SetServo(CLAW_SERVO_CHANNEL, CLAW_CENTER_ANGLE_DEGREES * 180 / 100);
+  RedRobot::SetServo(CLAW_SERVO_CHANNEL, CLAW_CENTER_ANGLE_DEGREES);
   RedRobot::InitLineSensors();
 
   // Autonomous starts only when the black line is visible. If the robot is

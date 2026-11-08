@@ -52,6 +52,19 @@ namespace Bluefruit
 
     if (activeMode == RobotControl::Mode::RampMotor)
     {
+      // Numbered button 3 combines both mechanisms: Up/Down runs the ramp
+      // while held, and Left/Right sends the claw once to a fixed position.
+      if (buttonPressedDown && (Button == LEFT || Button == RIGHT))
+      {
+        int16_t angle = Button == LEFT ? CLAW_LEFT_ANGLE_DEGREES
+                                      : CLAW_RIGHT_ANGLE_DEGREES;
+        // Button 2 previously drove the non-claw servo channels. Move those
+        // channels into the combined button-3 mode as requested. Include the
+        // configured claw channel so the mapping works for any servo connector.
+        for (uint8_t channel = 0; channel < 4; ++channel)
+          RedRobot::SetServo(channel, angle);
+      }
+
       int ramp_speed = 0;
       if (button_pressed[UP] && !button_pressed[DOWN])
       {
@@ -69,14 +82,13 @@ namespace Bluefruit
     {
       if (!buttonPressedDown) return;
 
-      // Convert HS-311 degrees to the existing servo driver's scale.
       if (Button == LEFT)
       {
-        RedRobot::SetServo(CLAW_SERVO_CHANNEL, CLAW_LEFT_ANGLE_DEGREES * 180 / 100);
+        RedRobot::SetServo(CLAW_SERVO_CHANNEL, CLAW_LEFT_ANGLE_DEGREES);
       }
       if (Button == RIGHT)
       {
-        RedRobot::SetServo(CLAW_SERVO_CHANNEL, CLAW_RIGHT_ANGLE_DEGREES * 180 / 100);
+        RedRobot::SetServo(CLAW_SERVO_CHANNEL, CLAW_RIGHT_ANGLE_DEGREES);
       }
       return;
     }
@@ -122,10 +134,6 @@ namespace Bluefruit
   void Button2_Pressed(bool buttonPressedDown)
   {
     if (buttonPressedDown) RobotControl::SelectMode(RobotControl::Mode::Drive);
-    // Keep the example arm control separate from the claw servo.
-    for (uint8_t channel = 0; channel < 4; ++channel)
-      if (channel != CLAW_SERVO_CHANNEL)
-        RedRobot::SetServo(channel, buttonPressedDown ? 180 : 0);
   }
 
   void Button3_Pressed(bool buttonPressedDown)
@@ -183,6 +191,16 @@ namespace RR_Controller
 
     if (activeMode == RobotControl::Mode::RampMotor)
     {
+      // Numbered button 3 combines both mechanisms: Up/Down runs the ramp
+      // while held, and Left/Right sends the claw once to a fixed position.
+      if (buttonPressedDown && (Button == LEFT || Button == RIGHT))
+      {
+        int16_t angle = Button == LEFT ? CLAW_LEFT_ANGLE_DEGREES
+                                      : CLAW_RIGHT_ANGLE_DEGREES;
+        for (uint8_t channel = 0; channel < 4; ++channel)
+          RedRobot::SetServo(channel, angle);
+      }
+
       int ramp_speed = 0;
       if (button_pressed[UP] && !button_pressed[DOWN])
       {
@@ -200,14 +218,13 @@ namespace RR_Controller
     {
       if (!buttonPressedDown) return;
 
-      // Convert HS-311 degrees to the existing servo driver's scale.
       if (Button == LEFT)
       {
-        RedRobot::SetServo(CLAW_SERVO_CHANNEL, CLAW_LEFT_ANGLE_DEGREES * 180 / 100);
+        RedRobot::SetServo(CLAW_SERVO_CHANNEL, CLAW_LEFT_ANGLE_DEGREES);
       }
       if (Button == RIGHT)
       {
-        RedRobot::SetServo(CLAW_SERVO_CHANNEL, CLAW_RIGHT_ANGLE_DEGREES * 180 / 100);
+        RedRobot::SetServo(CLAW_SERVO_CHANNEL, CLAW_RIGHT_ANGLE_DEGREES);
       }
       return;
     }
