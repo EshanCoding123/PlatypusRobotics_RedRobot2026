@@ -7,18 +7,14 @@ import argparse
 import asyncio
 import os
 import sys
-import time
 from concurrent.futures import Future, ThreadPoolExecutor
-from contextlib import asynccontextmanager, contextmanager, suppress
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
 
 RX_UUID = "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"
-TX_UUID = "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"
-FIRMWARE_ID = b"RR26-XBOX-3"
 ROBOT_NAME = "RR-11-platypus"
 NEUTRAL = b"!X" + bytes((100, 100, 1, 1))
-AUTONOMOUS = NEUTRAL + b"\x01"
 
 
 @dataclass
@@ -32,8 +28,6 @@ class Gamepad:
     dpad_down: bool = False
     dpad_left: bool = False
     dpad_right: bool = False
-    menu: bool = False
-    view: bool = False
 
 
 def read_gamepad(controller, pygame):
@@ -51,8 +45,6 @@ def read_gamepad(controller, pygame):
         dpad_down=controller.get_button(pygame.CONTROLLER_BUTTON_DPAD_DOWN),
         dpad_left=controller.get_button(pygame.CONTROLLER_BUTTON_DPAD_LEFT),
         dpad_right=controller.get_button(pygame.CONTROLLER_BUTTON_DPAD_RIGHT),
-        menu=controller.get_button(pygame.CONTROLLER_BUTTON_START),
-        view=controller.get_button(pygame.CONTROLLER_BUTTON_BACK),
     )
 
 
@@ -92,30 +84,6 @@ def command(gamepad):
     ))
 
 
-@dataclass
-class ControlState:
-    autonomous: bool = False
-    menu_was_pressed: bool = True
-    enable_seen_released: bool = False
-
-    def packet(self, gamepad):
-        menu_pressed = gamepad.menu and not self.menu_was_pressed
-        self.menu_was_pressed = gamepad.menu
-        # View always stops autonomy and requires RB release before manual drive.
-        if gamepad.view:
-            self.autonomous = False
-            self.enable_seen_released = False
-            return NEUTRAL
-        if menu_pressed and not gamepad.right_bumper:
-            self.autonomous = True
-            self.enable_seen_released = False
-        if self.autonomous:
-            return AUTONOMOUS
-        if not gamepad.right_bumper:
-            self.enable_seen_released = True
-        return command(gamepad) if self.enable_seen_released else NEUTRAL
-
-
 @asynccontextmanager
 async def bluetooth_connection(robot_name):
     # Keep all WinRT calls on one fresh thread, separate from SDL's COM setup.
@@ -152,16 +120,8 @@ async def bluetooth_connection(robot_name):
             client = BleakClient(device)
             try:
                 await client.connect()
-                await asyncio.wait_for(client.write_gatt_char(RX_UUID, NEUTRAL, response=True), 2.0)
-                try:
-                    firmware = await asyncio.wait_for(client.read_gatt_char(TX_UUID), 2.0)
-                except Exception as error:
-                    raise RuntimeError("Cannot verify Xbox firmware. Upload the updated RR26_Arduino sketch, then retry.") from error
-                if firmware != FIRMWARE_ID:
-                    raise RuntimeError("Robot firmware does not match this bridge. Upload the updated RR26_Arduino sketch.")
             except BaseException:
-                with suppress(Exception):
-                    await asyncio.wait_for(client.disconnect(), 3.0)
+                await client.disconnect()
                 raise
             return client
 
@@ -173,26 +133,22 @@ async def bluetooth_connection(robot_name):
                 if client.is_connected:
                     await asyncio.wait_for(client.write_gatt_char(RX_UUID, NEUTRAL, response=True), 2.0)
             finally:
-                await asyncio.wait_for(client.disconnect(), 3.0)
+                await client.disconnect()
 
         try:
             client = await invoke(connect())
             try:
                 yield send
-            except BaseException:
-                # Preserve the original controller/connection failure if cleanup also fails.
-                with suppress(Exception):
-                    await invoke(disconnect())
-                raise
-            else:
+            finally:
                 await invoke(disconnect())
         finally:
             loop.call_soon_threadsafe(stopped.set)
             await asyncio.wrap_future(worker_result)
 
 
-@contextmanager
-def open_controller(slot):
+async def run(robot_name, slot, debug=False):
+    print("Independent dual-stick controls v2", flush=True)
+    print(f"Running {os.path.abspath(__file__)}", flush=True)
     if sys.platform == "win32":
         # Prevent Python COM imports from selecting a GUI-only callback model.
         sys.coinit_flags = 0
@@ -219,27 +175,7 @@ def open_controller(slot):
         if slot not in connected_slots:
             raise RuntimeError(f"No supported controller at index {slot}.")
         controller = controllers.Controller(slot)
-        print(f"Using controller {slot}: {controllers.name_forindex(slot)}", flush=True)
-        yield controller, pygame
-    finally:
-        controllers.quit()
-        pygame.quit()
-
-
-def check_controller(slot):
-    print("Controller-only check. Press buttons and move both sticks. Ctrl+C exits.", flush=True)
-    with open_controller(slot) as (controller, pygame):
-        print(f"SDL version: {pygame.get_sdl_version()}", flush=True)
-        print(f"Controller mapping: {controller.get_mapping()}", flush=True)
-        while True:
-            print(read_gamepad(controller, pygame), flush=True)
-            time.sleep(0.2)
-
-
-async def run(robot_name, slot, debug=False):
-    print("Independent dual-stick controls v4 + firmware verification", flush=True)
-    print(f"Running {os.path.abspath(__file__)}", flush=True)
-    with open_controller(slot) as (controller, pygame):
+        print(f"Using controller {slot}.")
         print(f"Looking for robot {robot_name}...")
 
         async with bluetooth_connection(robot_name) as send:
@@ -247,22 +183,18 @@ async def run(robot_name, slot, debug=False):
             print("Connected. Release RB, then hold RB to enable controls. Ctrl+C exits.")
             print("Left stick/D-pad: drive. Right stick up/down: ramp. Right stick left/right: claw.")
             print("Hold RB and use both sticks together. Move the right stick past halfway.")
-            print("Release RB, then press Menu to start autonomous. View stops it and returns to manual.")
-            print("Compatible Xbox firmware verified.")
-            controls = ControlState()
+            enable_seen_released = False
             last_debug_time = 0.0
             while True:
                 gamepad = read_gamepad(controller, pygame)
-                previous_autonomous = controls.autonomous
-                packet = controls.packet(gamepad)
+                if not gamepad.right_bumper:
+                    enable_seen_released = True
+                packet = command(gamepad) if enable_seen_released else NEUTRAL
                 await send(packet)
-                if controls.autonomous != previous_autonomous:
-                    print("Requested mode: " + ("autonomous" if controls.autonomous else "manual"), flush=True)
                 now = asyncio.get_running_loop().time()
                 if debug and now - last_debug_time >= 0.5:
                     print(
                         f"RB={int(gamepad.right_bumper)} "
-                        f"autonomous={int(controls.autonomous)} "
                         f"left=({gamepad.left_x}, {gamepad.left_y}) "
                         f"right=({gamepad.right_x}, {gamepad.right_y}) "
                         f"sent turn={packet[2] - 100} drive={packet[3] - 100} "
@@ -271,6 +203,9 @@ async def run(robot_name, slot, debug=False):
                     )
                     last_debug_time = now
                 await asyncio.sleep(0.04)
+    finally:
+        controllers.quit()
+        pygame.quit()
 
 
 if __name__ == "__main__":
@@ -278,13 +213,9 @@ if __name__ == "__main__":
     parser.add_argument("robot_name", nargs="?", default=ROBOT_NAME, help=f"BLE device name (default: {ROBOT_NAME})")
     parser.add_argument("--slot", type=int, help="Controller index (default: detect automatically)")
     parser.add_argument("--debug", action="store_true", help="Show right-stick readings and transmitted mechanism commands")
-    parser.add_argument("--check-controller", action="store_true", help="Test controller inputs without connecting to the robot")
     args = parser.parse_args()
     try:
-        if args.check_controller:
-            check_controller(args.slot)
-        else:
-            asyncio.run(run(args.robot_name, args.slot, args.debug))
+        asyncio.run(run(args.robot_name, args.slot, args.debug))
     except KeyboardInterrupt:
         pass
     except ModuleNotFoundError as error:
