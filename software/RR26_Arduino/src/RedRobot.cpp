@@ -39,6 +39,7 @@ namespace Battery {
 } // namespace Battery
 
 namespace LineSensors {
+  constexpr uint16_t LINE_SENSOR_TIMEOUT_US = 10000;
   const int LINE_SENSOR_PINS[] = { LF0, LF1, LF2, LF3, LF4, LF5 };
   void init() {
     pinMode(LF_LEDCTRL, OUTPUT);
@@ -47,20 +48,35 @@ namespace LineSensors {
 
   void read(uint16_t values[6]) {
     digitalWrite(LF_LEDCTRL, HIGH);
-    vTaskDelay(pdMS_TO_TICKS(1));
+    delayMicroseconds(1000);
+
+    // Charge every RC sensor at the same time. Measuring the channels one at a
+    // time can take more than 60 ms when the array is over black; measuring the
+    // discharge in parallel keeps a complete scan near the 10 ms timeout.
     for (int i = 0; i < 6; ++i) {
       pinMode(LINE_SENSOR_PINS[i], OUTPUT);
       digitalWrite(LINE_SENSOR_PINS[i], HIGH);
-      vTaskDelay(pdMS_TO_TICKS(1));
-      pinMode(LINE_SENSOR_PINS[i], INPUT);
-      unsigned long long start = micros();
-      while (digitalRead(LINE_SENSOR_PINS[i]) && micros() - start < 10000) {}
-      unsigned long long end = micros();
-
-      uint16_t diff = end - start;
-
-      values[i] = diff;
+      values[i] = LINE_SENSOR_TIMEOUT_US;
     }
+    delayMicroseconds(1000);
+
+    uint32_t start = micros();
+    for (int i = 0; i < 6; ++i)
+      pinMode(LINE_SENSOR_PINS[i], INPUT);
+
+    uint8_t waitingForSensor = 0x3F;
+    uint32_t elapsed = 0;
+    while (waitingForSensor != 0 && elapsed < LINE_SENSOR_TIMEOUT_US) {
+      elapsed = micros() - start;
+      for (int i = 0; i < 6; ++i) {
+        uint8_t mask = 1U << i;
+        if ((waitingForSensor & mask) != 0 && !digitalRead(LINE_SENSOR_PINS[i])) {
+          values[i] = elapsed;
+          waitingForSensor &= ~mask;
+        }
+      }
+    }
+
     digitalWrite(LF_LEDCTRL, LOW);
   }
 } // namespace LineSensors

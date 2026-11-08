@@ -25,19 +25,22 @@ at +/-100; motor 1 is disabled and motors 2 and 3 are used for driving.
 packets by byte so binary release values can be handled. A BLE connection
 selects remote control; disconnect returns to autonomous mode.
 
-## QTR-8RC IR test
+## QTR-8RC line following
 
-`RR26_Arduino.ino` currently has `TEST_IR_SENSORS = true`. With BLE disconnected,
-the autonomous loop stops the motors and prints `[IR us] LF0=...` through LF5
-to the serial monitor at 115200 baud. It uses `RedRobot::ReadLineSensor()`.
-These are raw discharge times; black generally reads higher than white.
+With BLE disconnected, the autonomous loop follows the black center of the
+white-black-white path. It uses `RedRobot::ReadLineSensor()` and drives motors 2
+and 3 with a PD steering correction. The initial calibration constants and
+controller gains are at the top of `RR26_Arduino.ino`.
+
+The serial monitor prints `[LINE]` diagnostics at 115200 baud, including all six
+raw readings, the current state, steering error, and left/right motor commands.
+Black generally reads higher than white.
 
 Connect QTR VCC to 3V3, GND to GND, and outputs 1-6 to LF0-LF5 respectively.
 LEDON can connect to LEDCTRL. The QTR's 3.3V bypass is for 3.3V supply only;
 do not short it while using 5V. Verify the physical connector labels and wiring.
 
-At the robot, compare and record readings over the white floor and black line.
-Those readings will be used to choose a threshold and tune autonomous steering.
-Line following and the destination stop marker are **not implemented yet**.
-Setting `TEST_IR_SENSORS` to false runs the existing timed driving demo, which
-moves the robot; it does not follow a line.
+The follower continues straight when five or more sensors detect a broad black
+crossing. If it loses the line, it searches toward the last detected side for
+one second and then stops. Place the robot over the white-black-white strip
+before autonomous mode starts. A destination stop marker is not implemented.

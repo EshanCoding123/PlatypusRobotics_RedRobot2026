@@ -9,10 +9,109 @@
 #include "RedRobot.h"
 #include "MechanismConfig.h"
 
-// Declare some global variables
-bool started; // boolean (true or false) to keep track of if we should start
-int counter;  // integer to hold a count value
-const bool TEST_IR_SENSORS = true; // Set false to run the autonomous driving demo.
+namespace {
+
+constexpr uint8_t LINE_SENSOR_COUNT = 6;
+
+// LF0 through LF5 are ordered from the robot's left to its right. These
+// references are slightly above the largest non-black readings observed on
+// the competition floor. Each channel needs its own value because the raw RC
+// discharge times differ significantly from sensor to sensor.
+constexpr uint16_t LIGHT_REFERENCE[LINE_SENSOR_COUNT] = {
+  5800, 4200, 3600, 3700, 3550, 3300
+};
+constexpr uint16_t DARK_REFERENCE = 10000;
+
+// Position of each sensor across the front of the robot. A positive error
+// means the line is to the robot's right.
+constexpr float SENSOR_POSITION[LINE_SENSOR_COUNT] = {
+  -1.0f, -0.6f, -0.2f, 0.2f, 0.6f, 1.0f
+};
+
+constexpr float SENSOR_NOISE_FLOOR = 0.12f;
+constexpr float MINIMUM_LINE_STRENGTH = 0.18f;
+constexpr float WIDE_BLACK_STRENGTH = 2.5f;
+constexpr uint8_t WIDE_BLACK_SENSOR_COUNT = 5;
+
+// Run at full speed while the line is visible. Steering works by slowing the
+// inside wheel; the outside wheel remains capped at 100.
+constexpr int16_t BASE_DRIVE_SPEED = 100;
+constexpr int16_t MAX_DRIVE_SPEED = 100;
+constexpr int16_t MAX_STEERING_CORRECTION = 100;
+constexpr float STEERING_KP = 85.0f;
+constexpr float STEERING_KD = 30.0f;
+
+constexpr int16_t RECOVERY_FORWARD_SPEED = 15;
+constexpr int16_t RECOVERY_TURN_SPEED = 24;
+constexpr unsigned long LOST_LINE_TIMEOUT_MS = 1000;
+constexpr unsigned long DIAGNOSTIC_PERIOD_MS = 250;
+
+enum class LineState {
+  Tracking,
+  Crossing,
+  Recovering,
+  Stopped
+};
+
+float lastLineError = 0.0f;
+int8_t lastTurnDirection = 1;
+unsigned long lastLineSeenMs = 0;
+unsigned long lastDiagnosticMs = 0;
+
+const char *LineStateName(LineState state) {
+  switch (state) {
+    case LineState::Tracking:   return "TRACK";
+    case LineState::Crossing:   return "CROSS";
+    case LineState::Recovering: return "SEARCH";
+    case LineState::Stopped:    return "STOP";
+  }
+  return "UNKNOWN";
+}
+
+void SetDriveSpeed(int16_t leftSpeed, int16_t rightSpeed) {
+  leftSpeed = constrain(leftSpeed, -MAX_DRIVE_SPEED, MAX_DRIVE_SPEED);
+  rightSpeed = constrain(rightSpeed, -MAX_DRIVE_SPEED, MAX_DRIVE_SPEED);
+
+  RedRobot::WriteDCMotor(2, leftSpeed);
+  RedRobot::WriteDCMotor(3, rightSpeed);
+}
+
+float NormalizedDarkness(uint8_t sensor, uint16_t rawValue) {
+  int32_t valueAboveLight = static_cast<int32_t>(rawValue) - LIGHT_REFERENCE[sensor];
+  int32_t calibrationRange = DARK_REFERENCE - LIGHT_REFERENCE[sensor];
+  float darkness = static_cast<float>(valueAboveLight) / calibrationRange;
+
+  darkness = constrain(darkness, 0.0f, 1.0f);
+  return darkness >= SENSOR_NOISE_FLOOR ? darkness : 0.0f;
+}
+
+void PrintLineDiagnostics(const uint16_t values[LINE_SENSOR_COUNT],
+                          LineState state, float error,
+                          int16_t leftSpeed, int16_t rightSpeed,
+                          unsigned long now) {
+  if (now - lastDiagnosticMs < DIAGNOSTIC_PERIOD_MS)
+    return;
+
+  lastDiagnosticMs = now;
+  Serial.print("[LINE] ");
+  for (uint8_t i = 0; i < LINE_SENSOR_COUNT; ++i) {
+    Serial.print("LF");
+    Serial.print(i);
+    Serial.print("=");
+    Serial.print(values[i]);
+    Serial.print(" ");
+  }
+  Serial.print("state=");
+  Serial.print(LineStateName(state));
+  Serial.print(" error=");
+  Serial.print(error, 3);
+  Serial.print(" left=");
+  Serial.print(leftSpeed);
+  Serial.print(" right=");
+  Serial.println(rightSpeed);
+}
+
+} // namespace
 
 // This function runs ONCE, when the microcontroller boots up
 void setup() {
@@ -23,96 +122,88 @@ void setup() {
   RedRobot::SetServo(CLAW_SERVO_CHANNEL, CLAW_CENTER_ANGLE_DEGREES * 180 / 100);
   RedRobot::InitLineSensors();
 
-  // Initialize our variables
-  started = false;
-  counter = 0;
+  // Autonomous starts only when the black line is visible. If the robot is
+  // placed off the line, it remains stopped instead of choosing a random turn.
+  lastLineSeenMs = 0;
 }
 
-// This function runs over and over (in a loop) when you are in autonomous mode.
-// As an example, this code moves out of the starting box at start, and 
-// Look at RedRobot.h to see the robot interface: what functions you can call and how.
+// Follow the black center of the white-black-white path. This function is
+// called repeatedly while BLE remote control is disconnected.
 void AutonomousLoop() {
+  uint16_t sensorValues[LINE_SENSOR_COUNT];
+  RedRobot::ReadLineSensor(sensorValues);
 
-    if (TEST_IR_SENSORS) {
-        RedRobot::WriteDCMotor(0, 0);
-        RedRobot::WriteDCMotor(2, 0);
-        RedRobot::WriteDCMotor(3, 0);
+  float weightedPosition = 0.0f;
+  float totalStrength = 0.0f;
+  uint8_t activeSensorCount = 0;
 
-        uint16_t sensorValues[6];
-        RedRobot::ReadLineSensor(sensorValues);
+  for (uint8_t i = 0; i < LINE_SENSOR_COUNT; ++i) {
+    float darkness = NormalizedDarkness(i, sensorValues[i]);
+    if (darkness > 0.0f)
+      ++activeSensorCount;
 
-        // Raw discharge time in microseconds: darker surfaces usually read higher.
-        Serial.print("[IR us] ");
-        for (int i = 0; i < 6; ++i) {
-            Serial.print("LF");
-            Serial.print(i);
-            Serial.print("=");
-            Serial.print(sensorValues[i]);
-            Serial.print(" ");
-        }
-        Serial.println();
-        delay(200);
-        return;
-    }
+    weightedPosition += darkness * SENSOR_POSITION[i];
+    totalStrength += darkness;
+  }
 
-    if (!started) { // e.g. get out of the starting box
-        started = true;
+  unsigned long now = millis();
+  float lineError = lastLineError;
+  int16_t leftSpeed = 0;
+  int16_t rightSpeed = 0;
+  LineState state = LineState::Stopped;
 
-        // move forward - set motors 2 and 3 to speed 30
-        RedRobot::WriteDCMotor(2, 30);
-        RedRobot::WriteDCMotor(3, 30);
+  bool wideBlack = activeSensorCount >= WIDE_BLACK_SENSOR_COUNT &&
+                   totalStrength >= WIDE_BLACK_STRENGTH;
+  bool lineDetected = totalStrength >= MINIMUM_LINE_STRENGTH;
 
-        // wait 1000 milliseconds = 1 second
-        delay(1000);
+  if (wideBlack) {
+    // A broad black reading is the central crossing. Preserve the robot's
+    // heading rather than allowing small sensor differences to select a branch.
+    state = LineState::Crossing;
+    lineError = 0.0f;
+    lastLineError = 0.0f;
+    lastLineSeenMs = now;
+    leftSpeed = BASE_DRIVE_SPEED;
+    rightSpeed = BASE_DRIVE_SPEED;
+  } else if (lineDetected) {
+    state = LineState::Tracking;
+    lineError = weightedPosition / totalStrength;
 
-        // turn right - set motor 2 to speed 30 and motor 3 to -30
-        RedRobot::WriteDCMotor(2, 30);
-        RedRobot::WriteDCMotor(3, -30);
+    float derivative = lineError - lastLineError;
+    float correction = STEERING_KP * lineError + STEERING_KD * derivative;
+    correction = constrain(correction,
+                           -static_cast<float>(MAX_STEERING_CORRECTION),
+                           static_cast<float>(MAX_STEERING_CORRECTION));
 
-        delay(500); // half a second
+    int16_t steering = static_cast<int16_t>(correction);
+    leftSpeed = BASE_DRIVE_SPEED + steering;
+    rightSpeed = BASE_DRIVE_SPEED - steering;
 
-        // stop the motors
-        RedRobot::WriteDCMotor(2, 0);
-        RedRobot::WriteDCMotor(3, 0);
-    }
-    
-    // repeatedly move the servo and get in scoring position
-    // remember that the below code will run repeatedly since we are in
-    // the AutonomousLoop!
+    if (lineError > 0.05f)
+      lastTurnDirection = 1;
+    else if (lineError < -0.05f)
+      lastTurnDirection = -1;
 
-    // The claw servo is owned by its manual controls.
-    for (uint8_t channel = 0; channel < 4; ++channel)
-      if (channel != CLAW_SERVO_CHANNEL)
-        RedRobot::SetServo(channel, 0);
+    lastLineError = lineError;
+    lastLineSeenMs = now;
+  } else if (lastLineSeenMs != 0 &&
+             now - lastLineSeenMs <= LOST_LINE_TIMEOUT_MS) {
+    // Search toward the side where the line was last seen. One wheel reverses
+    // slightly so the robot can reacquire a sharp bend without travelling far.
+    state = LineState::Recovering;
+    int16_t correction = lastTurnDirection * RECOVERY_TURN_SPEED;
+    leftSpeed = RECOVERY_FORWARD_SPEED + correction;
+    rightSpeed = RECOVERY_FORWARD_SPEED - correction;
+  } else {
+    // Do not let the robot continue across the field after losing the path.
+    state = LineState::Stopped;
+    leftSpeed = 0;
+    rightSpeed = 0;
+  }
 
-    // move forward at speed 50
-    RedRobot::WriteDCMotor(2, 50);
-    RedRobot::WriteDCMotor(3, 50);
-
-    delay(1000);
-
-    // stop the motors
-    RedRobot::WriteDCMotor(2, 0);
-    RedRobot::WriteDCMotor(3, 0);
-
-    // Set the other servos to the demo positions.
-    for (uint8_t channel = 0; channel < 4; ++channel)
-      if (channel != CLAW_SERVO_CHANNEL)
-        RedRobot::SetServo(channel, channel % 2 == 0 ? 90 : 180);
-
-    delay(500);
-
-    // move backward
-    RedRobot::WriteDCMotor(2, -50);
-    RedRobot::WriteDCMotor(3, -50);
-
-    delay(1000);
-    
-    // Print to the serial console to debug!
-    Serial.print("[AUTO] Running ");
-    Serial.print(counter);
-    Serial.println();
-
-    // increment the counter
-    counter = counter + 1;
+  leftSpeed = constrain(leftSpeed, -MAX_DRIVE_SPEED, MAX_DRIVE_SPEED);
+  rightSpeed = constrain(rightSpeed, -MAX_DRIVE_SPEED, MAX_DRIVE_SPEED);
+  SetDriveSpeed(leftSpeed, rightSpeed);
+  PrintLineDiagnostics(sensorValues, state, lineError,
+                       leftSpeed, rightSpeed, now);
 }
