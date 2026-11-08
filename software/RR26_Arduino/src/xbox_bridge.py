@@ -28,10 +28,6 @@ class Gamepad:
     dpad_down: bool = False
     dpad_left: bool = False
     dpad_right: bool = False
-    a: bool = False
-    b: bool = False
-    x: bool = False
-    y: bool = False
 
 
 def read_gamepad(controller, pygame):
@@ -49,10 +45,6 @@ def read_gamepad(controller, pygame):
         dpad_down=controller.get_button(pygame.CONTROLLER_BUTTON_DPAD_DOWN),
         dpad_left=controller.get_button(pygame.CONTROLLER_BUTTON_DPAD_LEFT),
         dpad_right=controller.get_button(pygame.CONTROLLER_BUTTON_DPAD_RIGHT),
-        a=controller.get_button(pygame.CONTROLLER_BUTTON_A),
-        b=controller.get_button(pygame.CONTROLLER_BUTTON_B),
-        x=controller.get_button(pygame.CONTROLLER_BUTTON_X),
-        y=controller.get_button(pygame.CONTROLLER_BUTTON_Y),
     )
 
 
@@ -84,13 +76,11 @@ def command(gamepad):
         return NEUTRAL
     turn = axis_with_buttons(gamepad.left_x, gamepad.dpad_right, gamepad.dpad_left)
     drive = axis_with_buttons(gamepad.left_y, gamepad.dpad_up, gamepad.dpad_down)
-    ramp = axis_with_buttons(gamepad.right_y, gamepad.y, gamepad.a)
-    claw = axis_with_buttons(gamepad.right_x, gamepad.b, gamepad.x)
     return b"!X" + bytes((
         100 + drive_axis(turn),
         100 + drive_axis(drive),
-        1 + mechanism_direction(ramp),
-        1 + mechanism_direction(claw),
+        1 + mechanism_direction(gamepad.right_y),
+        1 + mechanism_direction(gamepad.right_x),
     ))
 
 
@@ -157,6 +147,8 @@ async def bluetooth_connection(robot_name):
 
 
 async def run(robot_name, slot, debug=False):
+    print("Independent dual-stick controls v2", flush=True)
+    print(f"Running {os.path.abspath(__file__)}", flush=True)
     if sys.platform == "win32":
         # Prevent Python COM imports from selecting a GUI-only callback model.
         sys.coinit_flags = 0
@@ -189,8 +181,8 @@ async def run(robot_name, slot, debug=False):
         async with bluetooth_connection(robot_name) as send:
             await send(NEUTRAL)
             print("Connected. Release RB, then hold RB to enable controls. Ctrl+C exits.")
-            print("Left stick/D-pad: drive. Y/A: ramp up/down. X/B: claw left/right.")
-            print("Right stick also operates the ramp and claw when moved past halfway.")
+            print("Left stick/D-pad: drive. Right stick up/down: ramp. Right stick left/right: claw.")
+            print("Hold RB and use both sticks together. Move the right stick past halfway.")
             enable_seen_released = False
             last_debug_time = 0.0
             while True:
@@ -203,9 +195,10 @@ async def run(robot_name, slot, debug=False):
                 if debug and now - last_debug_time >= 0.5:
                     print(
                         f"RB={int(gamepad.right_bumper)} "
+                        f"left=({gamepad.left_x}, {gamepad.left_y}) "
                         f"right=({gamepad.right_x}, {gamepad.right_y}) "
-                        f"Y/A={int(gamepad.y)}/{int(gamepad.a)} X/B={int(gamepad.x)}/{int(gamepad.b)} "
-                        f"sent ramp={packet[4] - 1} claw={packet[5] - 1}",
+                        f"sent turn={packet[2] - 100} drive={packet[3] - 100} "
+                        f"ramp={packet[4] - 1} claw={packet[5] - 1}",
                         flush=True,
                     )
                     last_debug_time = now
