@@ -24,6 +24,14 @@ class Gamepad:
     left_y: int = 0
     right_x: int = 0
     right_y: int = 0
+    dpad_up: bool = False
+    dpad_down: bool = False
+    dpad_left: bool = False
+    dpad_right: bool = False
+    a: bool = False
+    b: bool = False
+    x: bool = False
+    y: bool = False
 
 
 def read_gamepad(controller, pygame):
@@ -37,6 +45,14 @@ def read_gamepad(controller, pygame):
         left_y=-controller.get_axis(pygame.CONTROLLER_AXIS_LEFTY),
         right_x=controller.get_axis(pygame.CONTROLLER_AXIS_RIGHTX),
         right_y=-controller.get_axis(pygame.CONTROLLER_AXIS_RIGHTY),
+        dpad_up=controller.get_button(pygame.CONTROLLER_BUTTON_DPAD_UP),
+        dpad_down=controller.get_button(pygame.CONTROLLER_BUTTON_DPAD_DOWN),
+        dpad_left=controller.get_button(pygame.CONTROLLER_BUTTON_DPAD_LEFT),
+        dpad_right=controller.get_button(pygame.CONTROLLER_BUTTON_DPAD_RIGHT),
+        a=controller.get_button(pygame.CONTROLLER_BUTTON_A),
+        b=controller.get_button(pygame.CONTROLLER_BUTTON_B),
+        x=controller.get_button(pygame.CONTROLLER_BUTTON_X),
+        y=controller.get_button(pygame.CONTROLLER_BUTTON_Y),
     )
 
 
@@ -56,14 +72,25 @@ def mechanism_direction(value):
     return 0
 
 
+def axis_with_buttons(stick_value, positive, negative):
+    # Buttons override the corresponding stick axis. Opposite buttons cancel.
+    if positive or negative:
+        return 32767 * (int(positive) - int(negative))
+    return stick_value
+
+
 def command(gamepad):
     if not gamepad.right_bumper:
         return NEUTRAL
+    turn = axis_with_buttons(gamepad.left_x, gamepad.dpad_right, gamepad.dpad_left)
+    drive = axis_with_buttons(gamepad.left_y, gamepad.dpad_up, gamepad.dpad_down)
+    ramp = axis_with_buttons(gamepad.right_y, gamepad.y, gamepad.a)
+    claw = axis_with_buttons(gamepad.right_x, gamepad.b, gamepad.x)
     return b"!X" + bytes((
-        100 + drive_axis(gamepad.left_x),
-        100 + drive_axis(gamepad.left_y),
-        1 + mechanism_direction(gamepad.right_y),
-        1 + mechanism_direction(gamepad.right_x),
+        100 + drive_axis(turn),
+        100 + drive_axis(drive),
+        1 + mechanism_direction(ramp),
+        1 + mechanism_direction(claw),
     ))
 
 
@@ -161,8 +188,9 @@ async def run(robot_name, slot, debug=False):
 
         async with bluetooth_connection(robot_name) as send:
             await send(NEUTRAL)
-            print("Connected. Release RB, then hold RB to enable the sticks. Ctrl+C exits.")
-            print("Left stick drives. Right stick up/down runs the ramp; left/right moves the claw. Move it past halfway.")
+            print("Connected. Release RB, then hold RB to enable controls. Ctrl+C exits.")
+            print("Left stick/D-pad: drive. Y/A: ramp up/down. X/B: claw left/right.")
+            print("Right stick also operates the ramp and claw when moved past halfway.")
             enable_seen_released = False
             last_debug_time = 0.0
             while True:
@@ -176,6 +204,7 @@ async def run(robot_name, slot, debug=False):
                     print(
                         f"RB={int(gamepad.right_bumper)} "
                         f"right=({gamepad.right_x}, {gamepad.right_y}) "
+                        f"Y/A={int(gamepad.y)}/{int(gamepad.a)} X/B={int(gamepad.x)}/{int(gamepad.b)} "
                         f"sent ramp={packet[4] - 1} claw={packet[5] - 1}",
                         flush=True,
                     )
